@@ -1,0 +1,416 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>supervisor</title>
+  <link rel="stylesheet" href="/app/styles.css"/>
+  <style>
+    .tabs{display:flex; gap:10px; align-items:center}
+    .tab{padding:10px 12px; border-radius:14px; cursor:pointer; border:1px solid rgba(255,255,255,.12); color:var(--muted)}
+    .tab.active{color:var(--text); background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.22)}
+    .table td{vertical-align:top}
+    .mini{font-size:12px; color:var(--muted); line-height:1.4}
+    .imgmini{width:86px; height:86px; border-radius:14px; object-fit:cover; border:1px solid rgba(255,255,255,.10)}
+    .row2{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .muted{color:var(--muted)}
+    .right{margin-left:auto}
+    .modalBack{position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; padding:18px}
+    .modal{width:min(980px, 100%); background:rgba(20,20,24,.98); border:1px solid rgba(255,255,255,.14); border-radius:18px; padding:16px}
+    .modal .grid{grid-template-columns:repeat(12,1fr); gap:12px}
+    .xbtn{cursor:pointer; padding:8px 10px; border-radius:12px; border:1px solid rgba(255,255,255,.14)}
+    .nowrap{white-space:nowrap}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="dot"></div>
+        <div>
+          <h1>supervisor</h1>
+          <p id="who"></p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a data-page="employee.html" href="/app/employee.html"><span>employee</span><span class="badge">scan</span></a>
+        <a data-page="supervisor.html" href="/app/supervisor.html"><span>supervisor</span><span class="badge">queue</span></a>
+        <a data-page="dashboard.html" href="/app/dashboard.html"><span>dashboard</span><span class="badge">admin</span></a>
+        <a data-page="admin.html" href="/app/admin.html"><span>admin</span><span class="badge">tools</span></a>
+        <a data-page="feedback_admin.html" href="/app/feedback_admin.html"><span>feedback</span><span class="badge">nlp</span></a>
+        <a href="javascript:logout()"><span>logout</span><span class="badge">✦</span></a>
+      </nav>
+
+      <hr/>
+      <div class="notice">
+        review pending submissions, approve/reject, and track audit history.
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="header">
+        <div>
+          <h2>supervisor console</h2>
+          <p class="sub">queue + approval decisions + audit history.</p>
+        </div>
+
+        <div class="row right">
+          <div class="tabs">
+            <div class="tab active" id="tabQueue" onclick="switchTab('queue')">queue</div>
+            <div class="tab" id="tabHistory" onclick="switchTab('history')">history</div>
+          </div>
+          <button class="btn" onclick="load()">refresh</button>
+        </div>
+      </div>
+
+      <!-- QUEUE -->
+      <div id="viewQueue">
+        <div class="card">
+          <div class="row2">
+            <h3 style="margin:0">pending submissions</h3>
+            <span class="pill">status: <b>pending</b></span>
+            <span class="pill">tip: click “review” to approve/reject</span>
+            <span class="right muted" id="qCount"></span>
+          </div>
+
+          <div style="height:12px"></div>
+
+          <table class="table" id="queueTable"></table>
+        </div>
+      </div>
+
+      <!-- HISTORY -->
+      <div id="viewHistory" style="display:none">
+        <div class="card">
+          <div class="row2">
+            <h3 style="margin:0">audit log</h3>
+            <span class="pill">employee edits + supervisor actions</span>
+            <span class="right muted" id="hCount"></span>
+          </div>
+
+          <div style="height:12px"></div>
+
+          <table class="table" id="auditTable"></table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- REVIEW MODAL -->
+  <div class="modalBack" id="modalBack">
+    <div class="modal">
+      <div class="row2">
+        <div>
+          <h3 style="margin:0">review submission <span class="pill" id="m_sid"></span></h3>
+          <div class="mini" id="m_meta"></div>
+        </div>
+        <div class="right"></div>
+        <div class="xbtn" onclick="closeModal()">close</div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="grid">
+        <div class="card" style="grid-column: span 4;">
+          <h3>image</h3>
+          <img id="m_img" class="thumb" style="width:100%; height:260px; border-radius:16px; object-fit:cover"/>
+          <div style="height:10px"></div>
+          <div class="row2">
+            <span class="pill">conf: <b id="m_conf"></b></span>
+            <span class="pill">dist: <b id="m_dist"></b></span>
+          </div>
+          <div style="height:10px"></div>
+          <div class="mini"><b>employee note:</b> <span id="m_note"></span></div>
+        </div>
+
+        <div class="card" style="grid-column: span 8;">
+          <h3>final fields (you can override before approving)</h3>
+
+          <div class="grid" style="grid-template-columns:repeat(2,1fr); gap:10px">
+            <div>
+              <small>suggested</small>
+              <div class="mini" id="m_sugg"></div>
+            </div>
+            <div>
+              <small>employee edited</small>
+              <div class="mini" id="m_edit"></div>
+            </div>
+
+            <div>
+              <small>final id</small>
+              <input class="input" id="f_id" placeholder="final id"/>
+            </div>
+            <div>
+              <small>final name</small>
+              <input class="input" id="f_name" placeholder="final name"/>
+            </div>
+
+            <div>
+              <small>final article type</small>
+              <input class="input" id="f_type" placeholder="final article type"/>
+            </div>
+            <div>
+              <small>final material</small>
+              <input class="input" id="f_mat" placeholder="final material"/>
+            </div>
+
+            <div>
+              <small>final internal tag / ref</small>
+              <input class="input" id="f_tag" placeholder="final internal tag/ref"/>
+            </div>
+            <div>
+              <small>final price</small>
+              <input class="input" id="f_price" placeholder="e.g. 49.99"/>
+            </div>
+          </div>
+
+          <div style="height:10px"></div>
+          <small>supervisor note</small>
+          <textarea id="m_snote" class="input" placeholder="optional note…"></textarea>
+
+          <div style="height:12px"></div>
+          <div class="row2">
+            <button class="btn primary" onclick="approve()">approve</button>
+            <button class="btn" onclick="reject()">reject</button>
+            <span class="muted" id="m_msg"></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script src="/app/app.js"></script>
+<script>
+mustLogin();
+mustRole(["supervisor","admin"]);
+setActiveNav();
+
+let ACTIVE_TAB = "queue";
+let CURRENT_SUB = null;
+
+function switchTab(t){
+  ACTIVE_TAB = t;
+  el("tabQueue").classList.toggle("active", t==="queue");
+  el("tabHistory").classList.toggle("active", t==="history");
+  el("viewQueue").style.display = t==="queue" ? "" : "none";
+  el("viewHistory").style.display = t==="history" ? "" : "none";
+  load();
+}
+
+function pillKV(k,v){
+  return `<span class="pill"><span class="muted">${k}:</span> <b>${escapeHtml(v ?? "")}</b></span>`;
+}
+
+function rowField(label, a, b){
+  return `<div class="mini"><b>${escapeHtml(label)}:</b> ${escapeHtml(a ?? "—")} <span class="muted">|</span> ${escapeHtml(b ?? "—")}</div>`;
+}
+
+async function load(){
+  if(ACTIVE_TAB === "queue") return loadQueue();
+  return loadHistory();
+}
+
+async function loadQueue(){
+  // pending items list (token enforced by backend)
+  const data = await apiGet(`/admin/submissions?status=pending&limit=200`);
+  const items = data.items || [];
+  el("qCount").textContent = `${items.length} item(s)`;
+
+  if(!items.length){
+    el("queueTable").innerHTML = `
+      <tr><th>submission</th><th>image</th><th>details</th><th class="nowrap">actions</th></tr>
+      <tr><td colspan="4" style="color:var(--muted)">no pending submissions.</td></tr>
+    `;
+    return;
+  }
+
+  el("queueTable").innerHTML = `
+    <tr>
+      <th class="nowrap">submission</th>
+      <th>image</th>
+      <th>details</th>
+      <th class="nowrap">actions</th>
+    </tr>
+    ${items.map(s=>{
+      const conf = (s.edited_confidence ?? s.confidence ?? "");
+      const dist = (s.distance ?? "");
+      const sugName = s.suggested_name || "—";
+      const sugTag  = s.suggested_internal_tag || "—";
+      const edName = s.edited_name || "—";
+      const edTag  = s.edited_internal_tag || "—";
+
+      return `
+        <tr>
+          <td class="nowrap">
+            <div><b>#${escapeHtml(s.submission_id)}</b></div>
+            <div class="mini">${escapeHtml(s.submitted_at ?? "")}</div>
+            <div style="margin-top:6px">
+              ${pillKV("conf", conf)}
+              ${pillKV("dist", dist)}
+            </div>
+          </td>
+
+          <td>
+            ${s.image_url ? `<img class="imgmini" src="${escapeHtml(s.image_url)}"/>` : `<span class="muted">no image</span>`}
+          </td>
+
+          <td>
+            <div class="mini"><b>suggested</b></div>
+            <div class="mini">${escapeHtml(sugName)}</div>
+            <div class="mini muted">ref: ${escapeHtml(sugTag)}</div>
+            <div style="height:8px"></div>
+            <div class="mini"><b>employee edited</b></div>
+            <div class="mini">${escapeHtml(edName)}</div>
+            <div class="mini muted">ref: ${escapeHtml(edTag)}</div>
+          </td>
+
+          <td class="nowrap">
+            <button class="btn primary" onclick="openReview(${s.submission_id})">review</button>
+            <button class="btn" onclick="location.href='/app/result.html?id=${s.submission_id}'">open</button>
+          </td>
+        </tr>
+      `;
+    }).join("")}
+  `;
+}
+
+async function loadHistory(){
+  const data = await apiGet(`/admin/audit?limit=400`);
+  const items = data.items || [];
+  el("hCount").textContent = `${items.length} record(s)`;
+
+  if(!items.length){
+    el("auditTable").innerHTML = `
+      <tr><th>time</th><th>actor</th><th>action</th><th>submission</th><th>details</th></tr>
+      <tr><td colspan="5" style="color:var(--muted)">no audit history yet.</td></tr>
+    `;
+    return;
+  }
+
+  el("auditTable").innerHTML = `
+    <tr>
+      <th class="nowrap">time</th>
+      <th>actor</th>
+      <th>action</th>
+      <th class="nowrap">submission</th>
+      <th>details</th>
+    </tr>
+    ${items.map(r=>`
+      <tr>
+        <td class="nowrap">${escapeHtml(r.ts ?? "")}</td>
+        <td>${escapeHtml(r.actor_username ?? "—")}</td>
+        <td><span class="pill"><b>${escapeHtml(r.action ?? "")}</b></span></td>
+        <td class="nowrap">
+          ${r.submission_id ? `<a href="/app/result.html?id=${r.submission_id}">#${escapeHtml(r.submission_id)}</a>` : "—"}
+        </td>
+        <td class="mini">${escapeHtml(r.details ?? "")}</td>
+      </tr>
+    `).join("")}
+  `;
+}
+
+function closeModal(){
+  el("modalBack").style.display = "none";
+  CURRENT_SUB = null;
+}
+
+async function openReview(submissionId){
+  el("m_msg").textContent = "loading…";
+  el("modalBack").style.display = "flex";
+
+  const s = await apiGet(`/submission/${submissionId}`);
+  CURRENT_SUB = s;
+
+  el("m_sid").textContent = submissionId;
+  el("m_meta").textContent = `status: ${s.status || "pending"} • submitted_at: ${s.submitted_at || ""}`;
+
+  el("m_img").src = s.image_url || "";
+  el("m_conf").textContent = (s.edited_confidence ?? s.confidence ?? "—");
+  el("m_dist").textContent = (s.distance ?? "—");
+  el("m_note").textContent = s.employee_note || "—";
+
+  el("m_sugg").innerHTML = `
+    ${rowField("id", s.suggested_id, "")}
+    ${rowField("name", s.suggested_name, "")}
+    ${rowField("type", s.suggested_articleType, "")}
+    ${rowField("material", s.suggested_material, "")}
+    ${rowField("ref", s.suggested_internal_tag, "")}
+    ${rowField("price", s.suggested_price, "")}
+  `;
+
+  el("m_edit").innerHTML = `
+    ${rowField("id", s.edited_id, "")}
+    ${rowField("name", s.edited_name, "")}
+    ${rowField("type", s.edited_articleType, "")}
+    ${rowField("material", s.edited_material, "")}
+    ${rowField("ref", s.edited_internal_tag, "")}
+    ${rowField("price", s.edited_price, "")}
+  `;
+
+  // prefills final with employee edited -> suggested
+  el("f_id").value   = (s.edited_id || s.suggested_id || "").toString();
+  el("f_name").value = (s.edited_name || s.suggested_name || "");
+  el("f_type").value = (s.edited_articleType || s.suggested_articleType || "");
+  el("f_mat").value  = (s.edited_material || s.suggested_material || "");
+  el("f_tag").value  = (s.edited_internal_tag || s.suggested_internal_tag || "");
+  el("f_price").value = (s.edited_price ?? s.suggested_price ?? "") === null ? "" : (s.edited_price ?? s.suggested_price ?? "");
+
+  el("m_snote").value = "";
+  el("m_msg").textContent = "";
+}
+
+async function approve(){
+  if(!CURRENT_SUB) return;
+  el("m_msg").textContent = "approving…";
+
+  const payload = {
+    submission_id: Number(CURRENT_SUB.submission_id),
+    decision: "approve",
+    supervisor_note: el("m_snote").value || null,
+    final_id: el("f_id").value || null,
+    final_name: el("f_name").value || null,
+    final_articleType: el("f_type").value || null,
+    final_material: el("f_mat").value || null,
+    final_internal_tag: el("f_tag").value || null,
+  };
+
+  const price = el("f_price").value.trim();
+  if(price !== "") payload.final_price = Number(price);
+
+  try{
+    const res = await apiPost(`/supervisor/decision`, payload);
+    el("m_msg").textContent = `approved ✅ product_id=${res.product_id}`;
+    await loadQueue();
+    setTimeout(()=>closeModal(), 500);
+  }catch(e){
+    el("m_msg").textContent = "approve failed";
+  }
+}
+
+async function reject(){
+  if(!CURRENT_SUB) return;
+  el("m_msg").textContent = "rejecting…";
+
+  const payload = {
+    submission_id: Number(CURRENT_SUB.submission_id),
+    decision: "reject",
+    supervisor_note: el("m_snote").value || null
+  };
+
+  try{
+    await apiPost(`/supervisor/decision`, payload);
+    el("m_msg").textContent = "rejected ✅";
+    await loadQueue();
+    setTimeout(()=>closeModal(), 500);
+  }catch(e){
+    el("m_msg").textContent = "reject failed";
+  }
+}
+
+load();
+</script>
+</body>
+</html>

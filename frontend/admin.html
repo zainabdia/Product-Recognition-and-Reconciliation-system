@@ -1,0 +1,168 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>admin</title>
+  <link rel="stylesheet" href="/app/styles.css"/>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="dot"></div>
+        <div>
+          <h1>admin</h1>
+          <p id="who"></p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a data-page="dashboard.html" href="/app/dashboard.html"><span>dashboard</span><span class="badge">stats</span></a>
+        <a data-page="admin.html" href="/app/admin.html"><span>admin</span><span class="badge">errors/users</span></a>
+        <a data-page="feedback_admin.html" href="/app/feedback_admin.html"><span>feedback</span><span class="badge">nlp</span></a>
+        <a data-page="supervisor.html" href="/app/supervisor.html"><span>supervisor</span><span class="badge">queue</span></a>
+        <a data-page="employee.html" href="/app/employee.html"><span>employee</span><span class="badge">scan</span></a>
+        <a href="javascript:logout()"><span>logout</span><span class="badge">✦</span></a>
+      </nav>
+
+      <hr/>
+      <div class="notice">
+        admin tools
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="header">
+        <div>
+          <h2>admin tools</h2>
+          <p class="sub"> monitor and user roles.</p>
+        </div>
+        <div class="row">
+          <button class="btn" onclick="loadErrors()">refresh errors</button>
+          <button class="btn" onclick="loadUsers()">refresh users</button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card" style="grid-column: span 12;">
+          <h3>system error monitor</h3>
+          <table class="table" id="errors"></table>
+        </div>
+
+        <div class="card" style="grid-column: span 6;">
+          <h3>users</h3>
+          <table class="table" id="users"></table>
+        </div>
+
+        <div class="card" style="grid-column: span 6;">
+          <h3>create user</h3>
+          <div class="grid" style="grid-template-columns:repeat(2,1fr); gap:10px">
+            <div>
+              <small>username</small>
+              <input class="input" id="nu"/>
+            </div>
+            <div>
+              <small>password</small>
+              <input class="input" id="np" type="password"/>
+            </div>
+            <div style="grid-column: span 2;">
+              <small>role</small>
+              <select class="input" id="nr">
+                <option>employee</option>
+                <option>supervisor</option>
+                <option>admin</option>
+              </select>
+            </div>
+          </div>
+          <div style="height:12px"></div>
+          <div class="row">
+            <button class="btn primary" onclick="createUser()">create</button>
+            <span id="msg" style="color:var(--muted); font-size:13px"></span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script src="/app/app.js"></script>
+<script>
+mustLogin();
+mustRole(["admin"]);
+setActiveNav();
+
+async function loadErrors(){
+  const data = await apiGet("/admin/errors?limit=120");
+  const items = data.items || [];
+  el("errors").innerHTML = `
+    <tr><th>img</th><th>submission</th><th>type</th><th>desc</th><th>time</th></tr>
+    ${items.map(e=>`
+      <tr>
+        <td><img class="thumb" src="${e.image_url || ""}"></td>
+        <td><a class="pill" href="/app/result.html?id=${e.submission_id}">${e.submission_id}</a></td>
+        <td><span class="pill">${escapeHtml(e.error_type)}</span></td>
+        <td style="color:var(--muted)">${escapeHtml(e.description || "")}</td>
+        <td style="color:var(--muted)">${escapeHtml(e.created_at || "")}</td>
+      </tr>
+    `).join("")}
+  `;
+  if(items.length === 0){
+    el("errors").innerHTML = `<tr><td style="color:var(--muted)">no errors yet</td></tr>`;
+  }
+}
+
+async function loadUsers(){
+  const data = await apiGet("/admin/users");
+  const items = data.items || [];
+  el("users").innerHTML = `
+    <tr><th>id</th><th>username</th><th>role</th><th>active</th></tr>
+    ${items.map(u=>`
+      <tr>
+        <td>${u.id}</td>
+        <td>${escapeHtml(u.username)}</td>
+        <td>
+          <select class="input" style="width:140px" onchange="setRole(${u.id}, this.value)">
+            ${["employee","supervisor","admin"].map(r=>`<option ${u.role===r?"selected":""}>${r}</option>`).join("")}
+          </select>
+        </td>
+        <td>
+          <select class="input" style="width:120px" onchange="setActive(${u.id}, this.value)">
+            <option value="true" ${u.is_active===1?"selected":""}>true</option>
+            <option value="false" ${u.is_active!==1?"selected":""}>false</option>
+          </select>
+        </td>
+      </tr>
+    `).join("")}
+  `;
+}
+
+async function setRole(id, role){
+  await apiPatch(`/admin/users/${id}`, {role});
+}
+
+async function setActive(id, activeStr){
+  await apiPatch(`/admin/users/${id}`, {is_active: activeStr === "true"});
+}
+
+async function createUser(){
+  el("msg").textContent="creating…";
+  try{
+    const body = {
+      username: el("nu").value.trim(),
+      password: el("np").value,
+      role: el("nr").value
+    };
+    await apiPost("/admin/users", body);
+    el("msg").textContent="created ✅";
+    el("nu").value=""; el("np").value="";
+    loadUsers();
+  }catch(e){
+    el("msg").textContent="failed (username may exist)";
+  }
+}
+
+loadErrors();
+loadUsers();
+</script>
+</body>
+</html>

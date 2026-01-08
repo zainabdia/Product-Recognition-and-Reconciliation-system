@@ -1,0 +1,255 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>employee</title>
+  <link rel="stylesheet" href="/app/styles.css"/>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="dot"></div>
+        <div>
+          <h1>portal</h1>
+          <p id="who"></p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a data-page="employee.html" href="/app/employee.html"><span>employee</span><span class="badge">scan</span></a>
+        <a data-page="supervisor.html" href="/app/supervisor.html"><span>supervisor</span><span class="badge">queue</span></a>
+        <a data-page="dashboard.html" href="/app/dashboard.html"><span>dashboard</span><span class="badge">admin</span></a>
+        <a data-page="admin.html" href="/app/admin.html"><span>admin</span><span class="badge">tools</span></a>
+        <a data-page="feedback_admin.html" href="/app/feedback_admin.html"><span>feedback</span><span class="badge">nlp</span></a>
+        <a href="javascript:logout()"><span>logout</span><span class="badge">✦</span></a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <div class="header">
+        <div>
+          <h2>scan station</h2>
+          <p class="sub">capture an item image and submit for review.</p>
+        </div>
+        <span class="pill"><span class="dot ok"></span> online</span>
+      </div>
+
+      <div class="grid">
+        
+        <div class="card" style="grid-column: span 7;">
+          <div class="row" style="justify-content:space-between; align-items:flex-start;">
+            <div>
+              <h3 style="margin-bottom:6px;">camera capture</h3>
+              <small>use camera when available. fallback upload is below.</small>
+            </div>
+            <span class="pill"><span class="dot ok"></span> /scan-image</span>
+          </div>
+
+          <div style="height:10px"></div>
+
+          <video id="cam" autoplay playsinline class="thumb"
+                 style="width:100%; height:340px; border-radius:16px; object-fit:cover; background:rgba(0,0,0,.25);"></video>
+          <canvas id="snap" style="display:none;"></canvas>
+
+          <div style="height:10px"></div>
+          <div class="row">
+            <button class="btn" onclick="startCam()">start</button>
+            <button class="btn" onclick="takePhoto()">capture</button>
+            <button class="btn primary" onclick="scanCamera()">scan</button>
+            <button class="btn ghost" onclick="stopCam()">stop</button>
+          </div>
+
+          <div style="height:12px"></div>
+          <img id="previewShot" class="thumb"
+               style="width:100%; height:220px; border-radius:16px; object-fit:cover; display:none; background:rgba(0,0,0,.25);" />
+
+          <hr/>
+
+          <div class="row" style="justify-content:space-between; align-items:flex-start;">
+            <div>
+              <h3 style="margin-bottom:6px;">fallback upload</h3>
+              <small>use if camera access is unavailable.</small>
+            </div>
+            <span class="pill">source: web</span>
+          </div>
+
+          <div style="height:10px"></div>
+          <input class="input" type="file" id="file" accept="image/*"/>
+
+          <div style="height:10px"></div>
+          <div class="row">
+            <button class="btn primary" onclick="scanUpload()">scan upload</button>
+            <button class="btn ghost" onclick="clearUpload()">clear</button>
+          </div>
+
+          <div style="height:12px"></div>
+          <img id="preview" class="thumb"
+               style="width:100%; height:240px; border-radius:16px; object-fit:cover; background:rgba(0,0,0,.25);" />
+        </div>
+
+        <div class="card" style="grid-column: span 5;">
+          <h3>submission status</h3>
+          <div class="notice" id="status">idle</div>
+
+          <div style="height:14px"></div>
+
+          <h3>last action</h3>
+          <div class="row">
+            <span class="pill">mode: <b id="mode">—</b></span>
+            <span class="pill">time: <b id="time">—</b></span>
+          </div>
+
+          <div style="height:14px"></div>
+
+
+          <div style="height:14px"></div>
+
+          <div class="notice" style="opacity:.9">
+            if scan fails, retry with a closer shot and less background.
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script src="/app/app.js"></script>
+<script>
+mustLogin();
+mustRole(["employee","supervisor","admin"]);
+setActiveNav();
+
+function setPreview(file){
+  const img = el("preview");
+  if(!file){ img.removeAttribute("src"); return; }
+  img.src = URL.createObjectURL(file);
+}
+el("file").addEventListener("change", e=>{
+  const f = e.target.files[0];
+  setPreview(f);
+});
+function clearUpload(){
+  el("file").value = "";
+  setPreview(null);
+}
+
+
+function stamp(mode){
+  el("mode").textContent = mode;
+  el("time").textContent = new Date().toLocaleTimeString();
+}
+
+let camStream = null;
+let lastCamBlob = null;
+
+async function startCam(){
+  try{
+    el("status").textContent = "starting camera…";
+    stamp("camera");
+
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false
+    });
+
+    el("cam").srcObject = camStream;
+    el("status").textContent = "camera ready";
+  }catch(err){
+    el("status").textContent = "camera unavailable";
+  }
+}
+
+function stopCam(){
+  if(camStream){
+    camStream.getTracks().forEach(t => t.stop());
+    camStream = null;
+  }
+  el("status").textContent = "camera stopped";
+}
+
+function takePhoto(){
+  if(!camStream){
+    el("status").textContent = "camera not started";
+    return;
+  }
+
+  const video = el("cam");
+  const canvas = el("snap");
+  const w = video.videoWidth || 640;
+  const h = video.videoHeight || 480;
+  canvas.width = w;
+  canvas.height = h;
+
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(video, 0, 0, w, h);
+
+  canvas.toBlob((blob)=>{
+    if(!blob){
+      el("status").textContent = "capture failed";
+      return;
+    }
+    lastCamBlob = blob;
+
+    const img = el("previewShot");
+    img.src = URL.createObjectURL(blob);
+    img.style.display = "block";
+
+    el("status").textContent = "captured";
+    stamp("camera");
+  }, "image/jpeg", 0.92);
+}
+
+
+async function postScan(formData){
+  const res = await fetch("/scan-image", { method:"POST", body: formData });
+  const txt = await res.text();
+  if(!res.ok) throw new Error(txt);
+  return JSON.parse(txt);
+}
+
+async function scanCamera(){
+  if(!lastCamBlob){
+    el("status").textContent = "capture first";
+    return;
+  }
+
+  el("status").textContent = "scanning…";
+  stamp("camera");
+
+  try{
+    const fd = new FormData();
+    fd.append("file", lastCamBlob, "camera.jpg");
+
+    const data = await postScan(fd);
+    el("status").textContent = `created submission #${data.submission_id}`;
+    location.href = `/app/result.html?id=${data.submission_id}`;
+  }catch(e){
+    el("status").textContent = "scan failed";
+  }
+}
+
+async function scanUpload(){
+  const f = el("file").files[0];
+  if(!f){
+    el("status").textContent = "select a file";
+    return;
+  }
+
+  el("status").textContent = "scanning…";
+  stamp("upload");
+
+  try{
+    const fd = new FormData();
+    fd.append("file", f, f.name);
+
+    const data = await postScan(fd);
+    el("status").textContent = `created submission #${data.submission_id}`;
+    location.href = `/app/result.html?id=${data.submission_id}`;
+  }catch(e){
+    el("status").textContent = "scan failed";
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>customer feedback</title>
+  <link rel="stylesheet" href="/app/styles.css"/>
+</head>
+<body>
+  <div class="container" style="max-width:720px">
+    <div class="card">
+      <div class="brand" style="padding:0 0 12px">
+        <div class="dot"></div>
+        <div>
+          <h1>customer feedback</h1>
+          <p>help us improve</p>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:repeat(2,1fr); gap:12px">
+        <div>
+          <small>rating (1–5)</small>
+          <select class="input" id="rating">
+            <option value="5">5 - excellent</option>
+            <option value="4">4 - good</option>
+            <option value="3">3 - ok</option>
+            <option value="2">2 - bad</option>
+            <option value="1">1 - terrible</option>
+          </select>
+        </div>
+        <div>
+          <small>store / brand (optional)</small>
+          <input class="input" id="store" placeholder="e.g. lacoste / kipling"/>
+        </div>
+        <div style="grid-column: span 2;">
+          <small>comment (optional)</small>
+          <textarea class="input" id="comment" placeholder="tell us what went wrong or what you liked…"></textarea>
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+      <div class="row">
+        <button class="btn primary" onclick="send()">submit</button>
+        <span id="msg" style="color:var(--muted); font-size:13px"></span>
+        <span style="margin-left:auto"><a class="pill" href="/app/login.html">staff login</a></span>
+      </div>
+    </div>
+  </div>
+
+<script src="/app/app.js"></script>
+<script>
+async function send(){
+  el("msg").textContent="sending…";
+  try{
+    const body = {
+      rating: Number(el("rating").value),
+      store: el("store").value || null,
+      comment: el("comment").value || null
+    };
+    await apiPost("/feedback", body);
+    el("msg").textContent="thanks ✅";
+    el("store").value=""; el("comment").value="";
+  }catch(e){
+    el("msg").textContent="failed";
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,267 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>employee result</title>
+  <link rel="stylesheet" href="/app/styles.css"/>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="dot"></div>
+        <div>
+          <h1>portal</h1>
+          <p id="who"></p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a data-page="employee.html" href="/app/employee.html"><span>employee</span><span class="badge">scan</span></a>
+        <a data-page="supervisor.html" href="/app/supervisor.html"><span>supervisor</span><span class="badge">queue</span></a>
+        <a data-page="dashboard.html" href="/app/dashboard.html"><span>dashboard</span><span class="badge">admin</span></a>
+        <a data-page="admin.html" href="/app/admin.html"><span>admin</span><span class="badge">tools</span></a>
+        <a data-page="feedback_admin.html" href="/app/feedback_admin.html"><span>feedback</span><span class="badge">nlp</span></a>
+        <a href="javascript:logout()"><span>logout</span><span class="badge">✦</span></a>
+      </nav>
+
+      <hr/>
+      <div class="notice">
+        review the scan result, edit if needed, then submit for supervisor approval.
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="header">
+        <div>
+          <h2>employee results</h2>
+          <p class="sub">submission <span class="pill" id="sid"></span></p>
+        </div>
+        <div class="row">
+          <button class="btn" onclick="location.href='/app/employee.html'">new scan</button>
+          <button class="btn primary" onclick="saveEdits()">save edits</button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card" style="grid-column: span 6;">
+          <h3>scanned image</h3>
+          <img id="img" class="thumb" style="width:100%; height:360px; border-radius:16px;" />
+          <div style="height:10px"></div>
+          <div class="row">
+            <span class="pill"><span id="cdot" class="dot"></span> confidence: <b id="conf"></b></span>
+            <span class="pill">status: <b id="status"></b></span>
+          </div>
+        </div>
+
+        <div class="card" style="grid-column: span 6;">
+          <h3>suggested vs edited</h3>
+
+          <div class="grid" style="grid-template-columns:repeat(2,1fr); gap:10px">
+            <div>
+              <small>suggested name</small>
+              <div class="pill" style="margin-top:6px"><span class="dot ok"></span><span id="s_name"></span></div>
+            </div>
+            <div>
+              <small>edited name</small>
+              <input class="input" id="e_name" placeholder="edit name…"/>
+            </div>
+
+            <div>
+              <small>suggested ref</small>
+              <div class="pill" style="margin-top:6px"><span class="dot ok"></span><span id="s_tag"></span></div>
+            </div>
+            <div>
+              <small>edited ref</small>
+              <input class="input" id="e_tag" placeholder="edit internal tag/ref…"/>
+            </div>
+
+            <div>
+              <small>suggested material</small>
+              <div class="pill" style="margin-top:6px"><span class="dot ok"></span><span id="s_mat"></span></div>
+            </div>
+            <div>
+              <small>edited material</small>
+              <input class="input" id="e_mat" placeholder="edit material…"/>
+            </div>
+
+            <div>
+              <small>suggested article type</small>
+              <div class="pill" style="margin-top:6px"><span class="dot ok"></span><span id="s_type"></span></div>
+            </div>
+            <div>
+              <small>edited article type</small>
+              <input class="input" id="e_type" placeholder="edit type…"/>
+            </div>
+
+            <div>
+              <small>edited price</small>
+              <input class="input" id="e_price" placeholder="e.g. 49.99"/>
+            </div>
+            <div>
+              <small>edited confidence</small>
+              <select id="e_conf" class="input">
+                <option value="">leave as-is</option>
+                <option value="0.85">high</option>
+                <option value="0.60">medium</option>
+                <option value="0.30">low</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="height:10px"></div>
+
+          <small>employee note</small>
+          <textarea id="note" class="input" placeholder="optional note for supervisor/admin…"></textarea>
+
+          <div style="height:12px"></div>
+          <div class="row">
+            <button class="btn primary" onclick="saveEdits()">save edits</button>
+            <span id="msg" style="color:var(--muted); font-size:13px"></span>
+          </div>
+        </div>
+
+        <div class="card" style="grid-column: span 12;">
+          <h3>top 5 matches</h3>
+          <p class="sub" style="margin-top:-6px; color:var(--muted)">
+            click a row to autofill the edited fields.
+          </p>
+          <table class="table" id="top5"></table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script src="/app/app.js"></script>
+<script>
+mustLogin();
+setActiveNav();
+
+const id = qs("id");
+el("sid").textContent = id || "?";
+window.__top5 = [];
+
+function esc(x){
+  return (x ?? "").toString()
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;");
+}
+
+function renderTop5(items){
+  window.__top5 = items || [];
+
+  if(!window.__top5.length){
+    el("top5").innerHTML = `
+      <tr><th>candidate</th><th>material</th><th>ref</th><th>dist</th></tr>
+      <tr><td colspan="4" style="color:var(--muted)">no candidates saved for this submission.</td></tr>
+    `;
+    return;
+  }
+
+  el("top5").innerHTML = `
+    <tr>
+      <th>candidate</th>
+      <th>material</th>
+      <th>ref</th>
+      <th>dist</th>
+    </tr>
+    ${window.__top5.map((r, i)=>`
+      <tr style="cursor:pointer" onclick="pickCandidate(${i})">
+        <td><b>${esc(r.productDisplayName ?? r.name ?? r.id)}</b></td>
+        <td>${esc(r.material)}</td>
+        <td>${esc(r.internal_tag)}</td>
+        <td>${esc(r.dist ?? r.distance)}</td>
+      </tr>
+    `).join("")}
+  `;
+}
+
+function pickCandidate(i){
+  const r = window.__top5[i];
+  if(!r) return;
+
+  el("e_name").value = r.productDisplayName ?? r.name ?? "";
+  el("e_mat").value  = r.material ?? "";
+  el("e_tag").value  = r.internal_tag ?? "";
+
+
+
+  el("msg").textContent = "candidate selected";
+}
+
+async function load(){
+  if(!id) return;
+
+  const s = await apiGet(`/submission/${id}`);
+
+  if(s.image_url) el("img").src = s.image_url;
+
+  el("status").textContent = s.status || "pending";
+  const cval = (s.edited_confidence ?? s.confidence ?? "");
+  el("conf").textContent = (cval === null || cval === undefined) ? "" : cval.toString();
+  el("cdot").className = confDot(cval);
+
+  el("s_name").textContent = s.suggested_name || "";
+  el("s_tag").textContent  = s.suggested_internal_tag || "";
+  el("s_mat").textContent  = s.suggested_material || "";
+  el("s_type").textContent = s.suggested_articleType || "";
+
+  el("e_name").value = s.edited_name || "";
+  el("e_tag").value  = s.edited_internal_tag || "";
+  el("e_mat").value  = s.edited_material || "";
+  el("e_type").value = s.edited_articleType || "";
+  el("e_price").value = (s.edited_price ?? "") === null ? "" : (s.edited_price ?? "");
+  el("note").value = s.employee_note || "";
+
+  renderTop5(s.top5 || []);
+}
+
+async function saveEdits(){
+  el("msg").textContent = "saving…";
+
+  const payload = {
+    employee_id: auth().username || "employee",
+    employee_note: el("note").value || null,
+    edited_name: el("e_name").value || null,
+    edited_internal_tag: el("e_tag").value || null,
+    edited_material: el("e_mat").value || null,
+    edited_articleType: el("e_type").value || null,
+  };
+
+  const price = el("e_price").value.trim();
+  if(price !== "") payload.edited_price = Number(price);
+
+  const c = el("e_conf").value.trim();
+  if(c !== "") payload.edited_confidence = Number(c);
+
+  try{
+    const t = auth().token;
+
+    const res = await fetch(`/submission/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(t ? {"Authorization": "Bearer " + t} : {})
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const txt = await res.text();
+    if(!res.ok){
+      el("msg").textContent = "save failed: " + txt;
+      return;
+    }
+
+    el("msg").textContent = "saved ✅";
+    await load();
+  }catch(e){
+    el("msg").textContent = "save failed (network)";
+  }
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>login</title>
+  <link rel="stylesheet" href="/app/styles.css"/>
+</head>
+<body>
+  <div class="container" style="max-width:520px">
+    <div class="card" style="padding:18px; box-shadow: var(--shadow)">
+      <div class="brand" style="padding:0 0 12px">
+        <div class="dot"></div>
+        <div>
+          <h1>product recognition & reconciliation</h1>
+          <p>website portal</p>
+        </div>
+      </div>
+
+      <div class="notice" style="margin-bottom:12px">
+        default accounts: <b>admin/admin</b>, <b>supervisor/supervisor</b>, <b>employee/employee</b>
+      </div>
+
+      <label><small>username</small></label>
+      <input class="input" id="username" placeholder="admin" />
+
+      <div style="height:10px"></div>
+
+      <label><small>password</small></label>
+      <input class="input" id="password" type="password" placeholder="admin" />
+
+      <div style="height:14px"></div>
+
+      <button class="btn primary" style="width:100%" onclick="doLogin()">login</button>
+
+      <div class="footerbar">
+        <span id="msg"></span>
+        <a class="pill" href="/app/feedback.html">customer survey</a>
+      </div>
+    </div>
+  </div>
+
+<script src="/app/app.js"></script>
+<script>
+async function doLogin(){
+  el("msg").textContent = "";
+  try{
+    const username = el("username").value.trim();
+    const password = el("password").value;
+    const res = await apiPost("/auth/login", {username, password});
+    saveAuth(res);
+
+    // route by role
+    if(res.role === "admin") location.href = "/app/dashboard.html";
+    else if(res.role === "supervisor") location.href = "/app/supervisor.html";
+    else location.href = "/app/employee.html";
+  }catch(e){
+    el("msg").textContent = "login failed";
+  }
+}
+</script>
+</body>
+</html>

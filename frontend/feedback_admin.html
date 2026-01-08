@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>feedback admin</title>
+  <link rel="stylesheet" href="/app/styles.css"/>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="dot"></div>
+        <div>
+          <h1>feedback</h1>
+          <p id="who"></p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a data-page="dashboard.html" href="/app/dashboard.html"><span>dashboard</span><span class="badge">stats</span></a>
+        <a data-page="admin.html" href="/app/admin.html"><span>admin</span><span class="badge">errors/users</span></a>
+        <a data-page="feedback_admin.html" href="/app/feedback_admin.html"><span>feedback</span><span class="badge">nlp</span></a>
+        <a href="/app/feedback.html"><span>survey</span><span class="badge">public</span></a>
+        <a href="javascript:logout()"><span>logout</span><span class="badge">✦</span></a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <div class="header">
+        <div>
+          <h2>feedback analytics</h2>
+          <p class="sub">feedback.</p>
+        </div>
+        <div class="row">
+          <select id="days" class="input" style="width:160px" onchange="load()">
+            <option value="7">last 7 days</option>
+            <option value="30" selected>last 30 days</option>
+            <option value="90">last 90 days</option>
+          </select>
+          <button class="btn" onclick="load()">refresh</button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card" style="grid-column: span 4;">
+          <div class="kpi"><div class="value" id="total">0</div><div class="label">feedback entries</div></div>
+          <div style="height:10px"></div>
+          <div class="row">
+            <span class="pill"><span class="dot ok"></span> pos: <b id="pos">0</b></span>
+            <span class="pill"><span class="dot warn"></span> neu: <b id="neu">0</b></span>
+            <span class="pill"><span class="dot bad"></span> neg: <b id="neg">0</b></span>
+          </div>
+          <div style="height:10px"></div>
+          <span class="pill">avg rating: <b id="avg">–</b></span>
+        </div>
+
+        <div class="card" style="grid-column: span 8;">
+          <h3>top keywords</h3>
+          <div id="kw" class="row"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script src="/app/app.js"></script>
+<script>
+mustLogin();
+mustRole(["admin"]);
+setActiveNav();
+
+async function load(){
+  const days = Number(el("days").value);
+  const data = await apiGet(`/admin/feedback/stats?days=${days}`);
+
+  el("total").textContent = data.total ?? 0;
+  el("pos").textContent = data.sentiment?.positive ?? 0;
+  el("neu").textContent = data.sentiment?.neutral ?? 0;
+  el("neg").textContent = data.sentiment?.negative ?? 0;
+  el("avg").textContent = data.avg_rating ?? "–";
+
+  const kw = data.top_keywords || [];
+  el("kw").innerHTML = kw.length ? kw.map(x=>`<span class="pill">${escapeHtml(x.word)} <b>${x.count}</b></span>`).join("") : `<div class="notice">no keywords yet</div>`;
+}
+load();
+</script>
+</body>
+</html>

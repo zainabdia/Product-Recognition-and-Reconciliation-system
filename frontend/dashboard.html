@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>dashboard</title>
+  <link rel="stylesheet" href="/app/styles.css"/>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="dot"></div>
+        <div>
+          <h1>admin</h1>
+          <p id="who"></p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a data-page="dashboard.html" href="/app/dashboard.html"><span>dashboard</span><span class="badge">stats</span></a>
+        <a data-page="admin.html" href="/app/admin.html"><span>admin</span><span class="badge">errors/users</span></a>
+        <a data-page="feedback_admin.html" href="/app/feedback_admin.html"><span>feedback</span><span class="badge">nlp</span></a>
+        <a data-page="supervisor.html" href="/app/supervisor.html"><span>supervisor</span><span class="badge">queue</span></a>
+        <a data-page="employee.html" href="/app/employee.html"><span>employee</span><span class="badge">scan</span></a>
+        <a href="javascript:logout()"><span>logout</span><span class="badge">✦</span></a>
+      </nav>
+
+      <hr/>
+      <div class="notice">
+        <b>dashboard stats</b>.
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="header">
+        <div>
+          <h2>dashboard</h2>
+          <p class="sub">system overview + error + feedback snapshot.</p>
+        </div>
+        <div class="row">
+          <select id="days" class="input" style="width:160px" onchange="load()">
+            <option value="7">last 7 days</option>
+            <option value="30" selected>last 30 days</option>
+            <option value="90">last 90 days</option>
+          </select>
+          <button class="btn" onclick="load()">refresh</button>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card" style="grid-column: span 3;">
+          <div class="kpi"><div class="value" id="k_total">–</div><div class="label">total scans</div></div>
+        </div>
+        <div class="card" style="grid-column: span 3;">
+          <div class="kpi"><div class="value" id="k_pending">–</div><div class="label">pending</div></div>
+        </div>
+        <div class="card" style="grid-column: span 3;">
+          <div class="kpi"><div class="value" id="k_approved">–</div><div class="label">approved</div></div>
+        </div>
+        <div class="card" style="grid-column: span 3;">
+          <div class="kpi"><div class="value" id="k_rejected">–</div><div class="label">rejected</div></div>
+        </div>
+
+        <div class="card" style="grid-column: span 8;">
+          <h3>scans per day</h3>
+          <div id="series" style="display:flex; gap:6px; align-items:flex-end; height:180px; padding-top:10px"></div>
+          <div class="footerbar"><span>each bar = a day</span><span id="seriesHint"></span></div>
+        </div>
+
+        <div class="card" style="grid-column: span 4;">
+          <h3>errors by type</h3>
+          <div id="errors"></div>
+        </div>
+
+        <div class="card" style="grid-column: span 6;">
+          <h3>top materials</h3>
+          <div id="mats"></div>
+        </div>
+        <div class="card" style="grid-column: span 6;">
+          <h3>top article types</h3>
+          <div id="types"></div>
+        </div>
+
+        <div class="card" style="grid-column: span 12;">
+          <h3>feedback sentiment (quick)</h3>
+          <div class="row">
+            <span class="pill"><span class="dot ok"></span> positive: <b id="pos">0</b></span>
+            <span class="pill"><span class="dot warn"></span> neutral: <b id="neu">0</b></span>
+            <span class="pill"><span class="dot bad"></span> negative: <b id="neg">0</b></span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script src="/app/app.js"></script>
+<script>
+mustLogin();
+mustRole(["admin"]);
+setActiveNav();
+
+function barRow(items){
+  const max = Math.max(1, ...items.map(x=>x.count));
+  return `
+    <div style="display:flex; flex-direction:column; gap:8px">
+      ${items.map(x=>{
+        const w = Math.round((x.count / max) * 100);
+        return `
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:center">
+            <div style="width:160px; color:var(--muted)">${escapeHtml(x.label)}</div>
+            <div style="flex:1; border:1px solid var(--line); border-radius:999px; overflow:hidden; background:rgba(255,255,255,.04)">
+              <div style="width:${w}%; height:10px; background:linear-gradient(90deg, var(--accent), var(--accent2))"></div>
+            </div>
+            <div style="width:40px; text-align:right">${x.count}</div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+async function load(){
+  const days = Number(el("days").value);
+  const data = await apiGet(`/dashboard/stats?days=${days}`);
+
+  el("k_total").textContent = data.summary.total_scans;
+  el("k_pending").textContent = data.summary.pending;
+  el("k_approved").textContent = data.summary.approved;
+  el("k_rejected").textContent = data.summary.rejected;
+
+
+  const series = data.series_scans_per_day || [];
+  const max = Math.max(1, ...series.map(x=>x.count));
+  el("series").innerHTML = series.map(x=>{
+    const h = Math.max(2, Math.round((x.count / max) * 160));
+    return `
+      <div title="${x.date}: ${x.count}"
+           style="width:10px; height:${h}px; border-radius:999px;
+                  background:rgba(110,168,255,.28);
+                  border:1px solid rgba(110,168,255,.30)"></div>
+    `;
+  }).join("");
+  el("seriesHint").textContent = `max/day: ${max}`;
+
+
+  const err = data.error_by_type || [];
+  el("errors").innerHTML = err.length
+    ? barRow(err.map(e=>({label:e.type, count:e.count})))
+    : `<div class="notice">no errors recorded in this range</div>`;
+
+  el("mats").innerHTML = (data.top_materials?.length ? barRow(data.top_materials) : `<div class="notice">no data yet</div>`);
+  el("types").innerHTML = (data.top_article_types?.length ? barRow(data.top_article_types) : `<div class="notice">no data yet</div>`);
+
+  
+  el("pos").textContent = data.feedback_sentiment?.positive ?? 0;
+  el("neu").textContent = data.feedback_sentiment?.neutral ?? 0;
+  el("neg").textContent = data.feedback_sentiment?.negative ?? 0;
+}
+
+load();
+</script>
+</body>
+</html>
